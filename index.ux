@@ -1,320 +1,407 @@
-<import name="my-icon" src="../icon/index"></import>
+<import name="my-dialog" src="./components/dialog/index.ux"></import>
 <template>
-  <div class="apex-dialog">
-    <div class="mask {{showModal?'mask-exist':'mask-none'}}" if="{{visible}}">
-      <div class="dialog" style="{{setDialog}}">
-        <div class="box">
-          <div class="top">
-            <text class="title {{defaultOptions.closable?'title-close':'title-none'}}">{{ defaultPrompt.title || defaultOptions.title || title }}</text>
-            <div class="close" if="{{defaultOptions.closable}}" onclick="bindClose">
-              <slot name="close">
-                <text>x</text>
-              </slot>
-            </div>
-          </div>
-          <!-- 录音按钮
-          <div class="add" onclick="showRecordHint" ontouchstart="init" onlongpress="start" ontouchend="stop">
-            <image src="/Common/voice.png"></image>
-          </div> -->
-          <text class="content">{{
-            defaultPrompt.content || defaultOptions.content || content
-            }}</text>
-          <div if="{{ dialogType === 'prompt' }}">
-            <input id="focus" type="{{ defaultPrompt.fieldtype }}" style="{{defaultPrompt.inputStyle}}" value="{{value}}" placeholder="{{ defaultPrompt.placeholder }}" onchange="bindChange" maxlength="{{ defaultPrompt.maxlength === -1?'':defaultPrompt.maxlength }}" onenterkeyclick="bindEnter" />
-          </div>
-        </div>
-        <div class="btn {{dialogType === 'alter'||this.vertical===true?'btn-vertical':'btn-horizontal'}}">
-          <block if="{{defaultOptions.buttons}}" for="defaultOptions.buttons">
-            <div class="btnbox {{ $idx === defaultOptions.buttons.length-1 || $item.hasborder===false ?'':'_border'}}" onclick="bindButton($idx)">
-              <text style="{{$item.style||''}}">{{ $item.btn || $item }}</text>
-            </div>
-          </block>
-          <block if="{{defaultOptions.buttons.length===0}}">
-            <div if="{{dialogType!=='alter'}}" class="btnbox _border" onclick="bindCancel">
-              <text>{{ defaultOptions.cancel }}</text>
-            </div>
-            <div onclick="bindAffirm" class="btnbox">
-              <text>{{ defaultOptions.affirm }}</text>
-            </div>
-          </block>
-        </div>
+  <!-- template里只能有一个根节点 -->
+  <div class="demo-page">
+    <my-dialog visible="{{open}}" dialog-type='prompt' onaffirm="closeDialogBySuccess" oncancel="closeDialogByCancel" prompt="{{obj}}" onchange="updateContentValue"></my-dialog>
+    <!-- todos头部 -->
+    <text class="head">
+      todos
+    </text>
+    <div class="functions">
+      <!-- 加号按钮 -->
+      <div class="add" onclick="addItem">
+        <text>+</text>
+      </div>
+      <!-- 录音按钮 -->
+      <div class="add" onclick="showRecordHint" ontouchstart="init" onlongpress="start" ontouchend="stop">
+        <image src="/Common/voice.png"></image>
+      </div>
+
+      <!-- 跳转到统计页面 -->
+      <div class="add" onclick="routeStatistics">
+        <image src="/Common/statistics.png"></image>
+      </div>
+      <!-- 保存 -->
+      <div class="add" onclick="saveData">
+        <image src="/Common/save.png"></image>
+      </div>
+      <!-- 读取存档 -->
+      <div class="add read" onclick="getData">
+        <image src="/Common/read.png"></image>
       </div>
     </div>
+
+    <!-- 输入框 -->
+    <input type="text" class="input {{dynamicClassName}}" placeholder="What needs to be done?" value="{{newItemName}}" onchange="updateValue" onfocus="updateClass"></input>
+    <!-- 语音输入状态 -->
+    <div class="process">
+      <text class="result">{{action}}</text>
+      <text class="result">{{text}}</text>
+    </div>
+    <!-- 要做的事情的列表 -->
+    <list id="list" class="list-content">
+      <!-- 要做的事情的列表内容 -->
+      <list-item for="listData" type="listItem">
+
+        <div class="item {{$item.color}}" onclick="modifyItemStatus($idx)">
+          <div class="state-wapper" onclick="modifyItemStatus($idx)">
+            <!-- 要做的事情的状态 -->
+            <div class="btn-check {{$item.completed ? 'btn-checked' : ''}}"></div>
+            <text class="state" onclick="changeState">{{$item.state}}</text>
+          </div>
+          <div class="content-wapper">
+            <!-- 要做的事情的内容 -->
+            <text class="content" value="{{$item.value}}"></text>
+            <div class="time-wapper">
+              <!-- 完成时间 -->
+              <text class="content-smaller">完成时间:{{$item.date}} {{$item.time}}</text>
+
+            </div>
+          </div>
+          <!-- 编辑图标 -->
+          <image class="edit" src="/Common/edit.png" onclick="edit($idx)"></image>
+          <!-- 选择日期图标 -->
+          <!-- 用onclick无效 -->
+          <picker id="datePicker{{$idx}}" class="picker date-picker" type="date" onchange="getDate" ontouchstart="updateIndex($idx)"></picker>
+          <!-- 选择时间图标 -->
+          <picker id="timePicker{{$idx}}" class="picker time-picker" type="time" onchange="getTime" ontouchstart="updateIndex($idx)"></picker>
+
+        </div>
+
+        <!-- 删除图标 -->
+        <div class="delete {{$item.color}}" onclick="showHint('Long press x to delete it')" onlongpress="deleteItem($idx)">
+          <text>x</text>
+        </div>
+      </list-item>
+    </list>
+    <!-- 点击跳转详情页 -->
+
   </div>
-</template>
+
+</template> 
 
 <script>
-/* eslint-disable quotes */
+import router from '@system.router'
+import prompt from '@system.prompt'
+import asr from '@service.asr'
+import storage from '@system.storage'
+import alarm from '@system.alarm'
+import vibrator from '@system.vibrator'
+
+
 export default {
-  data: {
-    showModal: false,
-    setDialog: {},
-    value: "",
-    defaultOptions: {
-      closable: false,
-      title: "",
-      content: "",
-      buttons: [],
-      cancel: "取消",
-      affirm: "确认"
-    },
-    defaultPrompt: {
-      title: "",
-      content: "",
-      value: "",
-      fieldtype: "text",
-      placeholder: "请输入文本",
-      focus: false,
-      inputStyle: {},
-      maxlength: -1
-    }
-  },
-  props: {
-    vertical: {
-      type: Boolean,
-      default: false
-    },
-    title: {
-      type: String,
-      default: "修改待办"
-    },
-    content: {
-      type: String,
-      default: ""
-    },
-    dialogStyle: {
-      type: Object,
-      default: {}
-    },
-    dialogType: {
-      type: String,
-      default: "text"
-    },
-    visible: {
-      type: Boolean,
-      default: false
-    },
-    options: {
-      type: Object,
-      default: {}
-    },
-    prompt: {
-      type: Object,
-      default: {}
-    }
+
+  // 页面级组件的数据模型，影响传入数据的覆盖机制：private内定义的属性不允许被覆盖
+  private: {
+    title: '示例页面',
+    listData: [],
+    // 输入的记录内容
+    newItemName: '',
+    //修改时输入记录的内容
+    newItemContent: '',
+    // 动态样式名
+    dynamicClassName: '',
+    dynamicColorName: 'item-color',
+    //语言识别
+    action: '',
+    text: '',
+    time: '',
+    // 按钮状态
+    index: 0,
+    //Dialog是否被打开
+    open: false,
+    obj: {},
+    //修改结果
+    modifyResult:'',
+    //修改结果时显示的当前内容
+    currentValue:''
+
+
+
   },
   onInit() {
-    // eslint-disable-next-line quotes
-    this.$watch("visible", "modalHandler")
-    this.$watch("dialogStyle", "dialogStyleHandler")
-    this.$watch("defaultPrompt.value", "valueHandler")
-    this.resetData()
-  },
-  onReady() {
-    if (this.dialogType === "prompt" && this.$visible !== false) {
-      this.$element("focus").focus({ focus: this.defaultPrompt.focus })
 
-    }
+    this.listData = []
+    //把上次退出时保存的数据加载进来
+    this.getData()
+
   },
-  valueHandler(newV, oldV) {
-    this.value = newV
+  onDestroy() {
+    //页面销毁时保存数据
+    // this.saveData()
   },
-  optionsHandler(newV, oldV) {
-    newV.closable ? (this.defaultOptions.closable = newV.closable) : false
-    newV.title ? (this.defaultOptions.title = newV.title) : ""
-    newV.content ? (this.defaultOptions.content = newV.content) : ""
-    newV.buttons ? (this.defaultOptions.buttons = newV.buttons) : []
-    newV.cancel ? (this.defaultOptions.cancel = newV.cancel) : ""
-    newV.affirm ? (this.defaultOptions.affirm = newV.affirm) : ""
-  },
-  promptHandler(newV, oldV) {
-    newV.title ? (this.defaultPrompt.title = newV.title) : ""
-    newV.content ? (this.defaultPrompt.content = newV.content) : ""
-    newV.value ? (this.defaultPrompt.value = newV.value) : ""
-    newV.fieldtype ? (this.defaultPrompt.fieldtype = newV.fieldtype) : ""
-    newV.placeholder ? (this.defaultPrompt.placeholder = newV.placeholder) : ""
-    newV.focus ? (this.defaultPrompt.focus = newV.focus) : false
-    newV.inputStyle ? (this.defaultPrompt.inputStyle = newV.inputStyle) : {}
-  },
-  dialogStyleHandler(newV, oldV) {
-    console.log(newV, oldV)
-    this.setDialog = newV
-  },
-  resetData() {
-    if (this.visible === false) {
-      this.defaultOptions = {
-        closable: false,
-        title: "",
-        content: "",
-        buttons: [],
-        cancel: "取消",
-        affirm: "确认"
+  getData() {
+    // 初始化时从内存中取出待办事项
+    const that = this
+    storage.get({
+      key: 'todos',
+      success: function (data) {
+        console.log('storage get data success' + data)
+        if (!(typeof data === 'undefined' || data === null || data === '')) {
+          that.listData = JSON.parse(data)
+        } else {
+          that.listData = []
+        }
+      },
+      fail: function (data, code) {
+        console.log(`storage get data fail, code = ${code}`)
+        that.listData = []
       }
-      this.defaultPrompt = {
-        title: "",
-        content: "",
-        value: "",
-        fieldtype: "text",
-        placeholder: "请输入文本",
-        focus: false,
-        inputStyle: {}
+    })
+  },
+  saveData() {
+    //页面销毁时把数据放到内存中
+    try {
+      storage.set({
+        key: 'todos',
+        value: JSON.stringify(this.listData)
+      })
+      console.log('save data success' + JSON.stringify(this.listData))
+    } catch (e) {
+      console.log('save data failed with exception:' + e.message + '发生在' + e.lineNumber + '行')
+    }
+  },
+  routeDemoDetail() {
+    // 跳转到应用内的某个页面，router用法详见：文档->接口->页面路由
+    router.push({
+      uri: '/DemoDetail'
+    })
+  },
+  routeStatistics() {
+    // 数据统计页面
+    router.push({
+      uri: '/Statistics'
+    })
+  },
+  modifyItemStatus(idx) {
+    if (this.listData[idx].stateID == 1) {
+      this.updateDoingState(idx)
+    } else if (this.listData[idx].stateID == 2) {
+      this.updateDoneState(idx)
+    } else if (this.listData[idx].stateID == 3) {
+      this.updateTodoState(idx)
+    }
+  },
+  updateValue(evt) {
+    this.newItemName = evt.value
+    if (!evt.value.length) {
+      this.disabled = true
+    }
+    else {
+      this.disabled = false
+    }
+  },
+  updateContentValue(evt) {
+    this.newItemContent = evt.detail.event.value
+  },
+  // 更改输入框样式
+  updateClass() {
+
+    this.dynamicClassName = 'input-focus'
+  },
+  // 更改待办事项颜色
+  updateTodoState(idx) {
+    this.listData[idx].completed = false
+    this.listData[idx].color = 'item-color'
+    this.listData[idx].stateID = 1
+    this.listData[idx].state = 'TODO'
+  },
+  updateDoingState(idx) {
+    this.listData[idx].completed = false
+    this.listData[idx].color = 'item-color-doing'
+    this.listData[idx].stateID = 2
+    this.listData[idx].state = 'DOING'
+  },
+  updateDoneState(idx) {
+    this.listData[idx].completed = true
+    this.listData[idx].color = 'item-color-done'
+    this.listData[idx].stateID = 3
+    this.listData[idx].state = 'DONE'
+  },
+  edit(idx) {
+    //提交对列表内容的修改
+    this.updateIndex(idx)
+    this.currentValue = this.listData[this.index].value
+    this.openDialog()
+    
+  },
+  /**
+   * 增加一条记录
+   */
+  addItem() {
+    if (this.newItemName == '') {
+      this.showHint(`Please enter what you need to do`)
+    } else {
+      this.indexAdd = this.listData.length
+      this.listData.push({ value: this.newItemName, completed: false, color: 'item-color', stateID: 1, state: 'TODO', time: ':', date: ' - - ' })
+      this.newItemName = ''
+    }
+  },
+  /**
+   * 通过语音识别增加一条记录
+   */
+  addItemByPhone() {
+    this.indexAdd = this.listData.length
+    this.listData.push({ value: this.text, completed: false, color: 'item-color', stateID: 1, state: 'TODO', time: ':', date: ' - - ' })
+    this.newItemName = ''
+  },
+  // 删除一条记录
+  deleteItem(idx) {
+    this.listData.splice(idx, 1)
+  },
+  /**
+   * 信息提示
+   */
+  showHint(msg) {
+    prompt.showToast({ message: msg })
+  },
+  showRecordHint() {
+    this.showHint('请长按录音按钮进行语音输入')
+  },
+  //语音识别相关函数
+  init() {
+    // 定义 that 代理 this，保存当前作用域  
+    let that = this
+    this.text = ''
+    // asr 模块初始化
+    asr.init({
+      // 初始化成功后的回调函数
+      success: function () {
+        that.action = 'init success'
+      },
+      // 初始化失败后的回调函数
+      fail: function (data, code) {
+        that.action = `init fail, code=${code}, data=${data}`
       }
-      this.setDialog = {}
+    })
+    // 注册“部分识别”的响应函数，会在一次语音识别期间（asr.start 到 asr.stop 期间）被多次调用
+    asr.onpartialresult = ({ result }) => {
+      this.text = ` ${result}`
     }
-    this.$watch("options", "optionsHandler")
-    this.$watch("prompt", "promptHandler")
-    this.$watch("dialogStyle", "dialogStyleHandler")
-    this.$watch("defaultPrompt.value", "valueHandler")
-  },
-  modalHandler(newV, oldV) {
-    this.showModal = newV
-  },
-  bindCancel(evt) {
-    evt.stopPropagation()
-    this.$emit("cancel", { event: evt })
-    if (this.dialogType === "prompt") {
-      this.value = ""
+    // 注册“语音识别停止”的响应函数，在一次语音识别完成后（asr.stop 时）被调用
+    asr.oncompleteresult = ({ result }) => {
+      this.text = ` ${result.match(/\[(.*)\]/)[1]}`
+    }
+    // 注册语音识别期间出现错误的响应函数，在出错后被调用
+    asr.onerror = (error) => {
+      this.text = `onerror: ${error}`
     }
   },
-  bindChange(evt) {
-    this.value = evt.value
-    this.$emit("change", { event: evt })
+  start() {
+    let that = this
+    // 开始一次语音识别
+    that.text = ''
+    asr.start({
+      success: function () {
+        that.action = 'start success'
+      },
+      fail: function (data, code) {
+        that.action = `start fail, code=${code}, data=${data}`
+      }
+    })
   },
-  bindAffirm(evt) {
-
-    evt.stopPropagation()
-
-    this.$emit("affirm", { event: evt })
-    if (this.dialogType === "prompt") {
-      this.value = ""
+  stop() {
+    let that = this
+    // 停止当前语音识别
+    asr.stop({
+      success: function () {
+        that.action = 'stop success'
+        that.addItemByPhone()
+      },
+      fail: function (data, code) {
+        that.action = `stop fail, code=${code}, data=${data}`
+      }
+    })
+  },
+  close() {
+    let that = this
+    // 关闭语音识别功能，重新开始的话需要重新调用 asr.init
+    asr.close({
+      success: function () {
+        that.action = 'close success'
+      },
+      fail: function (data, code) {
+        that.action = `close fail, code=${code}, data=${data}`
+      }
+    })
+  },
+  //修改列表内容
+  getTime(e) {
+    this.listData[this.index].time = e.hour + ':' + e.minute
+    vibrator.vibrate({
+      mode: 'long'
+    })
+    var day = new Date(`${this.listData[this.index].date}`).getDay()
+    alarm.setAlarm({
+      hour: Number(e.hour),
+      minute: Number(e.minute),
+      message: '任务提醒',
+      vibrate: true,
+      days: [day],
+      //ringtone: `internal://Common/yume.mp3`,
+      success: function () {
+        console.log('alarm handling success')
+      },
+      fail: function (data, code) {
+        console.log(`alarm handling fail, code = ${code}`)
+      },
+      complete: function () {
+        console.log('alarm handling complete')
+      }
+    })
+  },
+  getDate(e) {
+    this.listData[this.index].date = e.year + '-' + (e.month + 1) + '-' + e.day
+  },
+  openDialog() {
+    this.open = true
+    this.obj = {
+      title: '修改待办',
+      content: '',
+      value: this.currentValue,
+      fieldtype: 'text',
     }
   },
-  bindEnter(evt) {
-    evt.stopPropagation()
-    if (this.dialogType === "prompt") {
-      this.$emit("enter", { event: evt })
-      this.$element("focus").focus({ focus: false })
-      // this.value = ""
-    }
+  closeDialogBySuccess(evt) {
+    this.listData[this.index].value = this.newItemContent
+    this.open = false
+    this.showHint('修改成功！')
   },
-  bindButton(index, $evt) {
-    if (this.dialogType === "prompt") {
-      this.value = ""
-    }
-    this.$emit(`click${index}`, { index, event: $evt })
+  closeDialogByCancel() {
+    this.open = false
+    this.showHint('未作修改')
   },
-  bindClose(evt) {
-    evt.stopPropagation()
-    this.$emit("close")
+  //更新index到全局变量便于其他函数访问
+  updateIndex(idx) {
+    this.index = idx
   }
 }
 </script>
 
-<style lang="less">
-@import "../styles/base.less";
-
-.mask {
-  position: fixed;
-  flex: 1;
-  top: 0;
-  bottom: 0;
-  width: 100%;
-  justify-content: center;
-  align-content: center;
-  align-items: center;
-  &-exist {
-    background-color: rgba(5, 5, 5, 0.6);
-  }
-  &-none {
-    background-color: transparent;
-    visibility: hidden;
-  }
-  .dialog {
-    flex-direction: column;
-    background-color: #fff;
-    width: 84%;
-    &-border {
-      border: 1px solid #e7e7e7;
-    }
-    .box {
-      flex-direction: column;
-      .top {
-        width: 100%;
-        padding: 30px * @ratio;
-        padding-bottom: 15px * @ratio;
-        justify-content: space-between;
-        .title {
-          text-align: center;
-          color: #000;
-          font-size: 32px * @ratio;
-          &-close {
-            width: 95%;
-            margin-left: 25px * @ratio;
-          }
-          &-none {
-            width: 100%;
-          }
-        }
-        .close {
-          width: 5%;
-          margin-top: -20px * @ratio;
-          text {
-            text-align: center;
-            width: 100%;
-            font-size: 50px * @ratio;
-          }
-        }
-      }
-      .content {
-        padding: 30px * @ratio;
-        padding-top: 15px * @ratio;
-        font-size: 28px * @ratio;
-        color: #a0a0a0;
-        text-align: center;
-      }
-      input {
-        font-size: 28px * @ratio;
-        border: 1px solid #e7e7e7;
-        width: 100%;
-        margin: 30px * @ratio;
-        height: 60px * @ratio;
-        line-height: 60px * @ratio;
-        margin-top: 0;
-        padding-left: 16px * @ratio;
-      }
-    }
-    .btn {
-      .btnbox {
-        padding: 24px * @ratio;
-        border-top: 1px solid #e7e7e7;
-        text {
-          width: 100%;
-          text-align: center;
-          font-size: 32px * @ratio;
-          color: #000000;
-        }
-      }
-      ._border {
-        border-right: 1px solid #e7e7e7;
-      }
-      .btnbox:active {
-        background-color: #e7e7e7;
-      }
-      &-vertical {
-        flex-direction: column;
-        .btnbox {
-          width: 100%;
-        }
-      }
-      &-horizontal {
-        flex-direction: row;
-        .btnbox {
-          width: 50%;
-        }
-      }
-    }
-  }
+<style>
+.demo-page {
+  flex-direction: column;
 }
+/* todos字样 */
+.head {
+  align-self: auto;
+  text-align: center;
+  font-size: 100px;
+  color: #8fcdd2;
+  text-decoration: underline;
+  margin-top: 30px;
+}
+
+.title {
+  font-size: 40px;
+  text-align: center;
+}
+/* 功能按钮(圆形按钮) */
+.functions {
+  justify-content: center;
+  margin-right: 20px;
+}
+/* 添加待办 */
 .add {
   width: 80px;
   height: 80px;
@@ -336,5 +423,162 @@ export default {
   height: 60px;
   margin-left: 10px;
   margin-top: 10px;
+}
+.input {
+  margin-left: 10px;
+  margin-right: 10px;
+  margin-top: 20px;
+  margin-bottom: 10px;
+  background-color: #d7e1e5;
+  padding-left: 20px;
+  height: 80px;
+  border-width: 3px;
+  border-color: #fff;
+  border-radius: 5px;
+}
+.input-focus {
+  border-color: rgb(203, 220, 221);
+}
+/* 语音识别状态 */
+.process {
+  flex-direction: column;
+  margin-top: 30px;
+  margin-bottom: 30px;
+}
+.process text {
+  text-align: center;
+  margin-top: 10px;
+  color: #c5cddb;
+}
+.list-content {
+  margin-left: 20px;
+  margin-right: 20px;
+  margin-top: 60px;
+}
+/* 列表条目的样式（不含右边的删除div） */
+.item {
+  height: 150px;
+  width: 700px;
+  margin-bottom: 15px;
+  border-radius: 6px;
+  padding-top: 20px;
+  padding-bottom: 20px;
+  padding-right: 20px;
+  animation-name: showItem;
+  animation-duration: 1s;
+}
+.item-color {
+  background-color: #8fafd2;
+}
+.item-color-doing {
+  background-color: #8fcdd2;
+}
+.item-color-done {
+  background-color: #d9dcdf;
+}
+/* 左边check和state字体的包装 */
+.state-wapper {
+  flex-direction: column;
+  padding-left: 20px;
+  padding-top: 20px;
+  width: 100px;
+  justify-content: center;
+}
+.btn-check {
+  width: 50px;
+  height: 50px;
+  /* margin: 25px; */
+  border-radius: 25px;
+  border-width: 4px;
+  border-color: #e5e5e5;
+  align-self: center;
+}
+.btn-checked {
+  border-width: 0px;
+  background-image: url("/Common/checked.png");
+}
+.state {
+  text-align: center;
+  color: #fff;
+  font-size: 20px;
+  margin-top: 10px;
+}
+.content-wapper {
+  flex-direction: column;
+  width: 320px;
+}
+/* 要做的事情的内容 */
+.content {
+  color: #fff;
+  height: 70px;
+  flex-wrap: wrap;
+  margin-left: 20px;
+}
+/* 完成时间和结束时间 */
+.content-smaller {
+  font-size: 20px;
+  color: #fff;
+  width: 300px;
+  margin-left: 20px;
+}
+/* 编辑图标 */
+.edit {
+  width: 60px;
+  height: 60px;
+  margin-top: 25px;
+  margin-left: 20px;
+  background-size: contain;
+}
+.delete {
+  width: 80px;
+  height: 80px;
+  margin-top: 35px;
+  text-align: right;
+  /* border-radius: 40px; */
+  border-top-right-radius: 40px;
+  border-bottom-right-radius: 40px;
+  animation-name: showItem;
+  animation-duration: 1s;
+}
+.delete text {
+  text-align: right;
+  color: #fff;
+  font-size: 50px;
+  margin-left: 25px;
+  margin-bottom: 15px;
+}
+.picker {
+  width: 70px;
+  height: 70px;
+  margin-left: 20px;
+  margin-top: 20px;
+}
+.date-picker {
+  background-image: url(/Common/calendar.png);
+}
+.time-picker {
+  background-image: url(/Common/time.png);
+}
+
+.time-wapper {
+  flex-direction: column;
+}
+.base {
+  flex-direction: column;
+}
+/* 动画的关键帧 */
+@keyframes showItem {
+  from {
+    transform: scaleX(1);
+    transform: scaleY(1);
+  }
+  to {
+    transform: scaleX(1.1);
+    transform: scaleY(1.1);
+  }
+  to {
+    transform: scaleX(1);
+    transform: scaleY(1);
+  }
 }
 </style>
